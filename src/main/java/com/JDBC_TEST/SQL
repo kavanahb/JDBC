@@ -1,0 +1,187 @@
+create schema university;
+
+CREATE TABLE Student (
+    StudentID SERIAL PRIMARY KEY,     
+    FirstName VARCHAR(100) NOT NULL,
+    LastName VARCHAR(100) NOT NULL,
+    Gender CHAR(1) CHECK (Gender IN ('M','F')), 
+    DOB DATE NOT NULL,
+    Email VARCHAR(150) UNIQUE NOT NULL,
+    Phone BIGINT UNIQUE,
+    Address VARCHAR(200)
+);
+
+CREATE TABLE Course (
+    CourseID SERIAL PRIMARY KEY,
+    CourseName VARCHAR(100) NOT NULL,
+    Credits INT NOT NULL,
+    Department VARCHAR(100) NOT NULL
+);
+
+
+CREATE TABLE Professor (
+    ProfID SERIAL PRIMARY KEY,
+    ProfName VARCHAR(100) NOT NULL,
+    Email VARCHAR(150) UNIQUE NOT NULL,
+    Department VARCHAR(100) NOT NULL
+);
+
+
+CREATE TABLE Enrollment (
+    EnrollID SERIAL PRIMARY KEY,
+    StudentID INT REFERENCES Student(StudentID) ON DELETE CASCADE,
+    CourseID INT REFERENCES Course(CourseID) ON DELETE CASCADE,
+    ProfID INT REFERENCES Professor(ProfID) ON DELETE SET NULL,
+    EnrollmentDate DATE NOT NULL,
+    Grade CHAR(2)   
+);
+
+
+INSERT INTO Student (FirstName, LastName, Gender, DOB, Email, Phone, Address) VALUES
+('Kavana', 'Aradhya', 'F', '2000-12-06', 'kavana@gmail.com', 987650001, 'Mandya'),
+('Sahana', 'Aradhya', 'F', '2000-07-12', 'sahana@gmail.com', 987650002, 'Mysore'),
+('Varun',  'Kumar',   'M', '1999-05-15', 'varun@gmail.com',  987650003, 'Bangalore'),
+('Rahul',  'Sharma',  'M', '2001-03-22', 'rahul@gmail.com',  987650004, 'Delhi'),
+('Anita',  'Rao',     'F', '2002-01-10', 'anita@gmail.com',  987650005, 'Chennai');
+
+
+INSERT INTO Course (CourseName, Credits, Department) VALUES
+('Java Programming', 4, 'CSE'),
+('Database Systems', 3, 'CSE'),
+('Digital Electronics', 3, 'ECE'),
+('Web Development', 4, 'IT'),
+('Machine Learning', 5, 'AIML');
+
+
+INSERT INTO Professor (ProfName, Email, Department) VALUES
+('Dr. Hitha', 'hitha@univ.edu', 'CSE'),
+('Dr. Meghana', 'meghana@univ.edu', 'ECE'),
+('Dr. Kavya', 'kavya@univ.edu', 'IT'),
+('Dr. Manasa', 'manasa@univ.edu', 'CSE'),
+('Dr. Dia', 'dia@univ.edu', 'AIML');
+
+
+INSERT INTO Enrollment (StudentID, CourseID, ProfID, EnrollmentDate, Grade) VALUES
+(1, 1, 1, '2024-01-05', 'A'),
+(2, 2, 4, '2024-01-06', 'B'),
+(3, 3, 2, '2024-01-07', 'A'),
+(4, 4, 3, '2024-01-08', 'C'),
+(5, 5, 5, '2024-01-09', 'A'),
+(1, 2, 4, '2024-01-10', 'B'),
+(2, 5, 5, '2024-01-11', 'A'),
+(3, 1, 1, '2024-01-12', 'B');
+
+1 Find the names of professors teaching courses in the CSE department.
+
+SELECT DISTINCT p.ProfName
+FROM Professor p
+JOIN Course c ON p.Department = c.Department
+WHERE c.Department = 'CSE';
+
+2 Find the students who got the highest grade in each course.
+
+SELECT s.FirstName, s.LastName, c.CourseName, e.Grade
+FROM Enrollment e
+JOIN Student s ON e.StudentID = s.StudentID
+JOIN Course c ON e.CourseID = c.CourseID
+WHERE e.Grade = (
+    SELECT MIN(e2.Grade)  -- 'A' is highest alphabetically
+    FROM Enrollment e2
+    WHERE e2.CourseID = e.CourseID
+);
+
+3 Retrieve the student(s) with the maximum number of enrollments.
+
+SELECT s.FirstName, s.LastName, COUNT(e.EnrollID) AS TotalEnrollments
+FROM Student s
+JOIN Enrollment e ON s.StudentID = e.StudentID
+GROUP BY s.StudentID, s.FirstName, s.LastName
+HAVING COUNT(e.EnrollID) = (
+    SELECT MAX(cnt)
+    FROM (
+        SELECT COUNT(*) AS cnt
+        FROM Enrollment
+        GROUP BY StudentID
+    ) AS sub
+);
+
+4 Find the professor who teaches the maximum number of students.
+
+SELECT p.ProfName, COUNT(DISTINCT e.StudentID) AS TotalStudents
+FROM Professor p
+JOIN Enrollment e ON p.ProfID = e.ProfID
+GROUP BY p.ProfID, p.ProfName
+ORDER BY TotalStudents DESC
+LIMIT 1;
+
+5 List students who have enrolled in all courses taught by Dr. Mehta.
+
+SELECT s.FirstName, s.LastName
+FROM Student s
+WHERE NOT EXISTS (
+    SELECT c.CourseID
+    FROM Course c
+    JOIN Professor p ON p.Department = c.Department
+    WHERE p.ProfName = 'Dr. Mehta'
+    EXCEPT
+    SELECT e.CourseID
+    FROM Enrollment e
+    WHERE e.StudentID = s.StudentID
+);
+
+6 Display the names of students who scored above the average grade in the Database course.
+
+SELECT s.FirstName, s.LastName, e.Grade
+FROM Enrollment e
+JOIN Student s ON e.StudentID = s.StudentID
+JOIN Course c ON e.CourseID = c.CourseID
+WHERE c.CourseName = 'Database Systems'
+  AND (
+      CASE e.Grade
+          WHEN 'A' THEN 4
+          WHEN 'B' THEN 3
+          WHEN 'C' THEN 2
+          WHEN 'D' THEN 1
+          ELSE 0
+      END
+  ) > (
+      SELECT AVG(
+          CASE e2.Grade
+              WHEN 'A' THEN 4
+              WHEN 'B' THEN 3
+              WHEN 'C' THEN 2
+              WHEN 'D' THEN 1
+              ELSE 0
+          END
+      )
+      FROM Enrollment e2
+      JOIN Course c2 ON e2.CourseID = c2.CourseID
+      WHERE c2.CourseName = 'Database Systems'
+  );
+
+
+7 Retrieve students along with total credits they are currently enrolled in.
+
+SELECT s.FirstName, s.LastName, SUM(c.Credits) AS TotalCredits
+FROM Enrollment e
+JOIN Student s ON e.StudentID = s.StudentID
+JOIN Course c ON e.CourseID = c.CourseID
+GROUP BY s.StudentID, s.FirstName, s.LastName;
+
+8 Display the student name, course name, professor name, and grade for each enrollment.
+
+SELECT s.FirstName, s.LastName, c.CourseName, p.ProfName, e.Grade
+FROM Enrollment e
+JOIN Student s ON e.StudentID = s.StudentID
+JOIN Course c ON e.CourseID = c.CourseID
+JOIN Professor p ON e.ProfID = p.ProfID;
+
+9 Find the professors who are teaching more than one course.
+
+SELECT p.ProfName, COUNT(DISTINCT c.CourseID) AS TotalCourses
+FROM Professor p
+JOIN Enrollment e ON p.ProfID = e.ProfID
+JOIN Course c ON e.CourseID = c.CourseID
+GROUP BY p.ProfID, p.ProfName
+HAVING COUNT(DISTINCT c.CourseID) > 1;
+
